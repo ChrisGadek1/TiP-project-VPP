@@ -144,6 +144,13 @@ function web_server_vpp_tap()
     done
 }
 
+function configure_snort_sniff()
+{
+   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_VPP_TAP_IP_MEMIF}\/32/" /etc/snort/snort.conf; }
+   sudo "alert icmp any any -> $HOME_NET any (msg:"ICMP test"; sid:10000001; rev:001;)" > /etc/snort/rules/local.rules
+   sudo snort -T -c /etc/snort/snort.conf
+}
+
 #------------------------------------------------------------------------------#
 # @brief:   Main/default entry point.
 function main()
@@ -161,6 +168,9 @@ function main()
     web_server_vxlan_linux &
     web_server_vpp_tap &
 
+    # Configure Snort to detect flooding
+    configure_snort_sniff &
+    
     # Enter our worker loop.
     context_loop
 }
