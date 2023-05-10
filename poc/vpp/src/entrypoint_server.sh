@@ -147,8 +147,20 @@ function web_server_vpp_tap()
 function configure_snort_sniff()
 {
    sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_VPP_TAP_IP_MEMIF}\/32/" /etc/snort/snort.conf; }
-   sudo "alert icmp any any -> $HOME_NET any (msg:"ICMP test"; sid:10000001; rev:001;)" > /etc/snort/rules/local.rules
+   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar EXTERNAL_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar EXTERNAL_NET !\$HOME_NET/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var RULE_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var RULE_PATH rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var SO_RULE_PATH ../so_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var SO_RULE_PATH so_rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var PREPROC_RULE_PATH ../preproc_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var PREPROC_RULE_PATH preproc_rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var WHITE_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var WHITE_LIST_PATH rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var BLACK_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var BLACK_LIST_PATH rules/" /etc/snort/snort.conf; }
    sudo snort -T -c /etc/snort/snort.conf
+   
+   sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
+   sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 1000, seconds 3" >> /etc/snort/threshold.conf
+
+   
+
+   sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
 }
 
 #------------------------------------------------------------------------------#

@@ -11,4 +11,5 @@
 !entrypoint_client.sh
 !entrypoint_server.sh
 !vpp_testbench_helpers.sh
-
+!rules
+!ddos_rules.txt

@@ -124,5 +124,7 @@ ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
 HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
 # Image-specific overrides.
 ADD ./entrypoint_server.sh /entrypoint.sh
+ADD rules /etc/snort/rules
+ADD ./ddos_rules.txt /etc/snort/rules/ddos_rules.txt
 ENTRYPOINT ["/entrypoint.sh"]
 
