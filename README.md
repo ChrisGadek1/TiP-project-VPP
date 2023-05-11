@@ -21,7 +21,7 @@ Proof of concept (Przykładowa aplikacja) składa się z dwóch kontenerów, kt�
 Ruch sieciowy w przykładowej aplikacji odbywa się poprzez VPP zainstalowane na hoście, na którym działają kontenery. W celu przetestowania aplikacji, należy go najpierw zainstalować.
 
 ```
-curl −s https://packagecloud.io/install/repositories/fdio/release/script.deb.sh | sudobash
+curl −s https://packagecloud.io/install/repositories/fdio/release/script.deb.sh | sudo bash
 sudo apt-get update
 sudo apt−get install vpp vpp−plugin−core vpp−plugin−dpdk
 ```
@@ -67,4 +67,4 @@ Został on skonfiguwany tak, aby wypisał ostrzeżenie przy zajściu odpowiednic
 alert tcp !$HOME_NET any -> $HOME_NET any (msg:"Possible DoS - other TCP"; flow: stateless; detection_filter: track by_src, count 1000, seconds 3; sid:10000001)
 ```
 
-Zatem uruchomi ona alarm, gdy otrzyma więcej niż 1000 pakietów do przetworzenia w ciągu sekundy.
+Zatem uruchomi ona alarm, gdy otrzyma więcej niż 1000 pakietów do przetworzenia w ciągu 3 sekund.
