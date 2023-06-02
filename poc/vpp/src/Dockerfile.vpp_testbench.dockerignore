@@ -8,8 +8,8 @@
 *
 
 # Entrypoint scripts and other artifacts.
-!entrypoint_client.sh
-!entrypoint_server.sh
+!client_ddos.sh
+!server_ddos.sh
 !vpp_testbench_helpers.sh
 !rules
 !ddos_rules.txt

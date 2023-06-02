@@ -27,8 +27,18 @@ fi
 # Health check probe port for all containers.
 export DOCKER_HEALTH_PROBE_PORT="8123"
 # Docker bridge network settings.
-export CLIENT_BRIDGE_IP_DOCKER="169.254.0.1"
-export SERVER_BRIDGE_IP_DOCKER="169.254.0.2"
+
+export CLIENT_DDOS_BRIDGE_IP_DOCKER="169.254.0.1"
+export CLIENT_SQL_INJECTION_BRIDGE_IP_DOCKER="169.254.0.2"
+export CLIENT_XSS_BRIDGE_IP_DOCKER="169.254.0.3"
+export CLIENT_NORMAL_BRIDGE_IP_DOCKER="169.254.0.4"
+
+export SERVER_DDOS_IP_DOCKER="169.254.0.5"
+export SERVER_SQL_INJECTION_IP_DOCKER="169.254.0.6"
+export SERVER_XSS_IP_DOCKER="169.254.0.7"
+export SERVER_HTTP_IP_DOCKER="169.254.0.8"
+
+export SERVER_DDOS_IP_DOCKER="169.254.0.2"
 export BRIDGE_NET_DOCKER="169.254.0.0/24"
 export BRIDGE_GW_DOCKER="169.254.0.254"
 # Overlay IP addresses.
@@ -165,7 +175,7 @@ function host_only_run_testbench_client_container()
         --name "${DOCKER_CLIENT_HOST}" \
         --volume="$(pwd):/work:rw" \
         --volume="${VPP_SOCK_PATH}:/run/vpp:rw" \
-        --network name="${DOCKER_NET},ip=${CLIENT_BRIDGE_IP_DOCKER}" \
+        --network name="${DOCKER_NET},ip=${CLIENT_DDOS_BRIDGE_IP_DOCKER}" \
         --workdir=/work \
         "${image_name}"
 }
@@ -193,7 +203,7 @@ function host_only_run_testbench_server_container()
         --device=/dev/vhost-net:/dev/vhost-net \
         --name "${DOCKER_SERVER_HOST}" \
         --volume="${VPP_SOCK_PATH}:/run/vpp:rw" \
-        --network name="${DOCKER_NET},ip=${SERVER_BRIDGE_IP_DOCKER}" \
+        --network name="${DOCKER_NET},ip=${SERVER_DDOS_IP_DOCKER}" \
         "${image_name}"
 }
 

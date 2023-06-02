@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# @brief:       Launcher/entrypoint script plus helper functions for "client
+# @brief:       Launcher/entrypoint script plus helper functions for "server
 #               side" container in the VPP testbench.
 # @author:      Matthew Giassa <mgiassa@cisco.com>
 # @copyright:   (C) Cisco 2021.
@@ -18,7 +18,7 @@
 # Globals.
 ################################################################################
 # VPP instance socket.
-export VPP_SOCK=/run/vpp/vpp.testbench-client.sock
+export VPP_SOCK=/run/vpp/server_ddos.sock
 # Alias for vppctl that uses the correct socket name.
 export VPPCTL="vppctl -s ${VPP_SOCK}"
 # Our "Docker bridge network". Don't change this value.
@@ -37,12 +37,12 @@ function vc()
 }
 
 #------------------------------------------------------------------------------#
-# @brief:   Used to initialize/configure the client container once it's up and
+# @brief:   Used to initialize/configure the server container once it's up and
 #           running.
 function context_create()
 {
     set -x
-    echo "Running client. Host: $(hostname)"
+    echo "Running server. Host: $(hostname)"
     local mtu
 
     # Setup VXLAN overlay.
@@ -50,12 +50,12 @@ function context_create()
         type vxlan \
         id "${VXLAN_ID_LINUX}" \
         dstport "${VXLAN_PORT}" \
-        local "${CLIENT_BRIDGE_IP_DOCKER}" \
+        local "${SERVER_DDOS_IP_DOCKER}" \
         group "${MC_VXLAN_ADDR_LINUX}" \
         dev "${NET_IF_DOCKER}" \
         ttl 1
     ip link set "${LINK_VXLAN_LINUX}" up
-    ip addr add "${CLIENT_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
+    ip addr add "${SERVER_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
 
     # Get MTU of interface. VXLAN must use a smaller value due to overhead.
     mtu="$(cat /sys/class/net/${NET_IF_DOCKER}/mtu)"
@@ -65,7 +65,7 @@ function context_create()
     ip link set dev "${LINK_VXLAN_LINUX}" mtu "$((mtu - 50))"
 
     # Bring-up VPP and create tap interfaces and VXLAN tunnel.
-    sudo vpp \
+    vpp \
         unix '{' log /tmp/vpp1.log full-coredump cli-listen ${VPP_SOCK} '}' \
         api-segment '{' prefix vpp1 '}' \
         api-trace '{' on '}' \
@@ -77,22 +77,22 @@ function context_create()
     done
 
     # Bring up the memif interface and assign an IP to it.
-    ${VPPCTL} create interface memif id 0 slave
+    ${VPPCTL} create interface memif id 0 master
     sleep 1
     ${VPPCTL} set int state memif0/0 up
-    ${VPPCTL} set int ip address memif0/0 "${CLIENT_VPP_MEMIF_IP}/${VPP_MEMIF_NM}"
+    ${VPPCTL} set int ip address memif0/0 "${SERVER_VPP_MEMIF_IP}/${VPP_MEMIF_NM}"
 
     # Create VPP-controlled tap interface bridged to the memif.
     ${VPPCTL} create tap id 0 host-if-name vpp-tap-0
     sleep 1
     ${VPPCTL} set interface state tap0 up
-    ip addr add "${CLIENT_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
+    ip addr add "${SERVER_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
     ${VPPCTL} set interface l2 bridge tap0          "${VPP_BRIDGE_DOMAIN_TAP}"
     ${VPPCTL} set interface l2 bridge memif0/0      "${VPP_BRIDGE_DOMAIN_TAP}"
 }
 
 #------------------------------------------------------------------------------#
-# @brief:   Used to shutdown/cleanup the client container.
+# @brief:   Used to shutdown/cleanup the server container.
 function context_destroy()
 {
     # OS will reclaim interfaces and resources when container is terminated.
@@ -100,14 +100,14 @@ function context_destroy()
 }
 
 #------------------------------------------------------------------------------#
-# @brief:   Client worker loop to keep the container alive. Just idles.
+# @brief:   Server worker loop to keep the container alive. Just idles.
 function context_loop()
 {
     # Sleep indefinitely (to keep container alive for testing).
     # tail -f /dev/null
-    iperf -c ${SERVER_VPP_TAP_IP_MEMIF} -t 20
-    echo "koniec iperfa klient"
-    tail -f /dev/null
+
+    iperf -s -V
+
 }
 
 #------------------------------------------------------------------------------#
@@ -123,6 +123,47 @@ function health_check_init()
 }
 
 #------------------------------------------------------------------------------#
+# @brief:   Launches a minimalistic web server via netcat. This instance is
+#           meant to bind to the Linux VXLAN tunnel we create.
+function web_server_vxlan_linux()
+{
+    while true; do
+        echo -e "HTTP/1.1 200 OK\n\nHOST:$(hostname)\nDATE:$(date)\nHello from the Linux interface." \
+            | nc -l -s "${SERVER_VXLAN_IP_LINUX}" -p 8000 -q 1
+    done
+}
+
+#------------------------------------------------------------------------------#
+# @brief:   Launches a minimalistic web server via netcat. This instance is
+#           meant to bind to the VPP VXLAN tunnel we create.
+function web_server_vpp_tap()
+{
+    while true; do
+        echo -e "HTTP/1.1 200 OK\n\nHOST:$(hostname)\nDATE:$(date)\nHello from the VPP interface." \
+            | nc -l -s "${SERVER_VPP_TAP_IP_MEMIF}" -p 8000 -q 1
+    done
+}
+
+function configure_snort_sniff()
+{
+   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_VPP_TAP_IP_MEMIF}\/32/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar EXTERNAL_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar EXTERNAL_NET !\$HOME_NET/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var RULE_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var RULE_PATH rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var SO_RULE_PATH ../so_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var SO_RULE_PATH so_rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var PREPROC_RULE_PATH ../preproc_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var PREPROC_RULE_PATH preproc_rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var WHITE_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var WHITE_LIST_PATH rules/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "var BLACK_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var BLACK_LIST_PATH rules/" /etc/snort/snort.conf; }
+   sudo snort -T -c /etc/snort/snort.conf
+   
+   sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
+   sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 1000, seconds 3" >> /etc/snort/threshold.conf
+
+   
+
+   sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
+}
+
+#------------------------------------------------------------------------------#
 # @brief:   Main/default entry point.
 function main()
 {
@@ -135,6 +176,13 @@ function main()
     # Enable health check responder.
     health_check_init &
 
+    # Bring up test web servers.
+    web_server_vxlan_linux &
+    web_server_vpp_tap &
+
+    # Configure Snort to detect flooding
+    configure_snort_sniff &
+    
     # Enter our worker loop.
     context_loop
 }

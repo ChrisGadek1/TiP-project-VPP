@@ -75,7 +75,7 @@ all: docker
 # Build all docker images.
 .PHONY: docker
 docker: Dockerfile.vpp_testbench Dockerfile.vpp_testbench.dockerignore \
-	entrypoint_client.sh entrypoint_server.sh \
+	client_ddos.sh server_ddos.sh \
 	vpp_testbench_helpers.sh
 	# Client image.
 	DOCKER_BUILDKIT=1 docker build \
