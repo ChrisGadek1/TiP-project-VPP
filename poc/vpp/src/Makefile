@@ -11,12 +11,14 @@ SHELL=/bin/bash
 
 # Image names.
 # TODO: semver2 format if we want to publish these to a registry.
-DOCKER_CLIENT_IMG               := client
-DOCKER_CLIENT_REL               := local
-DOCKER_CLIENT_IMG_FULL          := $(DOCKER_CLIENT_IMG):$(DOCKER_CLIENT_REL)
-DOCKER_SERVER_IMG               := server
-DOCKER_SERVER_REL               := local
-DOCKER_SERVER_IMG_FULL          := $(DOCKER_SERVER_IMG):$(DOCKER_SERVER_REL)
+DOCKER_CLIENT_DDOS_IMG               := client_ddos
+DOCKER_CLIENT_REL                    := local
+DOCKER_CLIENT_DDOS_IMG_FULL          := $(DOCKER_CLIENT_DDOS_IMG):$(DOCKER_CLIENT_REL)
+DOCKER_SERVER_DDOS_IMG               := server_ddos
+DOCKER_SERVER_REL                    := local
+DOCKER_SERVER_DDOS_IMG_FULL          := $(DOCKER_SERVER_DDOS_IMG):$(DOCKER_SERVER_REL)
+DOCKER_SERVER_SQL_INJECTION_IMG      := server_sql_injection
+DOCKER_SERVER_SQL_INJECTION_IMG_FULL := $(DOCKER_SERVER_SQL_INJECTION_IMG):$(DOCKER_SERVER_REL)
 # Docker build-time settings (and run-time settings as well).
 DOCKER_HEALTH_PROBE_PORT        := $(shell bash -c ". vpp_testbench_helpers.sh; host_only_get_docker_health_probe_port")
 
@@ -29,8 +31,9 @@ define cleanup_everything
 	# Terminate the containers.
 	bash -c "\
 		. vpp_testbench_helpers.sh; \
-		host_only_kill_testbench_client_container $(DOCKER_CLIENT_IMG_FULL); \
-		host_only_kill_testbench_server_container $(DOCKER_SERVER_IMG_FULL); \
+		host_only_kill_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
+		host_only_kill_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
+		host_only_kill_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
 		"
 
 	# Cleanup Docker bridge network.
@@ -53,8 +56,9 @@ define launch_testbench
 	# Launch the containers.
 	bash -c "\
 		. vpp_testbench_helpers.sh; \
-		host_only_run_testbench_client_container $(DOCKER_CLIENT_IMG_FULL); \
-		host_only_run_testbench_server_container $(DOCKER_SERVER_IMG_FULL); \
+		host_only_run_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
+		host_only_run_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
+		host_only_run_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
 		"
 
 	# Entrypoint scripts will bring up the various links.
@@ -75,23 +79,29 @@ all: docker
 # Build all docker images.
 .PHONY: docker
 docker: Dockerfile.vpp_testbench Dockerfile.vpp_testbench.dockerignore \
-	client_ddos.sh server_ddos.sh \
+	client_ddos.sh server_ddos.sh server_sql_injection.sh \
 	vpp_testbench_helpers.sh
-	# Client image.
+	# Client ddos image.
 	DOCKER_BUILDKIT=1 docker build \
 			--file Dockerfile.vpp_testbench \
 			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
-			--tag $(DOCKER_CLIENT_IMG_FULL) \
-			--target client_img \
+			--tag $(DOCKER_CLIENT_DDOS_IMG_FULL) \
+			--target client_ddos_img \
 			.
-	# Server image.
+	# Server ddos image.
 	DOCKER_BUILDKIT=1 docker build \
 			--file Dockerfile.vpp_testbench \
 			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
-			--tag $(DOCKER_SERVER_IMG_FULL) \
-			--target server_img \
+			--tag $(DOCKER_SERVER_DDOS_IMG_FULL) \
+			--target server_ddos_img \
 			.
-
+	# Server sql_injection image.
+	DOCKER_BUILDKIT=1 docker build \
+			--file Dockerfile.vpp_testbench \
+			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
+			--tag $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL) \
+			--target server_sql_injection_img \
+			.
 #------------------------------------------------------------------------------#
 # Execute end-to-end test via containers.
 .PHONY: test

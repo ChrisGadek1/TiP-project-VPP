@@ -18,7 +18,7 @@
 # Globals.
 ################################################################################
 # VPP instance socket.
-export VPP_SOCK=/run/vpp/server_ddos.sock
+export VPP_SOCK=/run/vpp/server_sql_injection.sock
 # Alias for vppctl that uses the correct socket name.
 export VPPCTL="vppctl -s ${VPP_SOCK}"
 # Our "Docker bridge network". Don't change this value.
@@ -50,12 +50,12 @@ function context_create()
         type vxlan \
         id "${VXLAN_ID_LINUX}" \
         dstport "${VXLAN_PORT}" \
-        local "${SERVER_DDOS_IP_DOCKER}" \
+        local "${SERVER_SQL_INJECTION_IP_DOCKER}" \
         group "${MC_VXLAN_ADDR_LINUX}" \
         dev "${NET_IF_DOCKER}" \
         ttl 1
     ip link set "${LINK_VXLAN_LINUX}" up
-    ip addr add "${SERVER_DDOS_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
+    ip addr add "${SERVER_SQL_INJECTION_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
 
     # Get MTU of interface. VXLAN must use a smaller value due to overhead.
     mtu="$(cat /sys/class/net/${NET_IF_DOCKER}/mtu)"
@@ -80,13 +80,13 @@ function context_create()
     ${VPPCTL} create interface memif id 0 master
     sleep 1
     ${VPPCTL} set int state memif0/0 up
-    ${VPPCTL} set int ip address memif0/0 "${SERVER_DDOS_VPP_TAP_IP_MEMIF}/${VPP_MEMIF_NM}"
+    ${VPPCTL} set int ip address memif0/0 "${SERVER_SQL_INJECTION_VPP_TAP_IP_MEMIF}/${VPP_MEMIF_NM}"
 
     # Create VPP-controlled tap interface bridged to the memif.
     ${VPPCTL} create tap id 0 host-if-name vpp-tap-0
     sleep 1
     ${VPPCTL} set interface state tap0 up
-    ip addr add "${SERVER_DDOS_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
+    ip addr add "${SERVER_SQL_INJECTION_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
     ${VPPCTL} set interface l2 bridge tap0          "${VPP_BRIDGE_DOMAIN_TAP}"
     ${VPPCTL} set interface l2 bridge memif0/0      "${VPP_BRIDGE_DOMAIN_TAP}"
 }
@@ -107,15 +107,16 @@ function context_loop()
     # tail -f /dev/null
 
     # iperf -s -V
-    answer="HTTP/1.1 200 OK\n
-    <html><body><h1>It works!</h1></body></html>"
-    sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
+    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'HTTP/1.0 200 OK\r\n\r\n\'"
+    #     answer="HTTP/1.1 200 OK\n
+    # <html><body><h1>It works!</h1></body></html>"
+    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
+    tail -f /dev/null
 }
-
 
 function configure_snort_sniff()
 {
-   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_DDOS_VXLAN_IP_LINUX}\/32/" /etc/snort/snort.conf; }
+   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_SQL_INJECTION_VXLAN_IP_LINUX}\/32/" /etc/snort/snort.conf; }
    sudo cat /etc/snort/snort.conf | grep -Fn "ipvar EXTERNAL_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar EXTERNAL_NET !\$HOME_NET/" /etc/snort/snort.conf; }
    sudo cat /etc/snort/snort.conf | grep -Fn "var RULE_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var RULE_PATH rules/" /etc/snort/snort.conf; }
    sudo cat /etc/snort/snort.conf | grep -Fn "var SO_RULE_PATH ../so_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var SO_RULE_PATH so_rules/" /etc/snort/snort.conf; }
@@ -125,11 +126,48 @@ function configure_snort_sniff()
    # sudo snort -T -c /etc/snort/snort.conf
    
    sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
+   sudo echo "config daq: afpacket" >> cat /etc/snort/snort.conf
+   sudo echo "config daq_mode: inline" >> cat /etc/snort/snort.conf
    # sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 100, seconds 3" >> /etc/snort/threshold.conf
 
    sudo cat /etc/snort/snort.conf
-   sudo snort -A console -i ${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
-   sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
+   sudo snort --daq afpacket -Q -i vpp-tap-0:${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
+}
+
+function configure_proxy()
+{
+    nginx_config="
+    events {
+        worker_connections  4096;
+    }
+
+    http {
+            access_log  /var/log/nginx/access.log;
+
+            server {
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+
+            listen 80;
+
+            server_name _;
+                
+            location / {
+                proxy_pass http://${SERVER_DDOS_VXLAN_IP_LINUX}:80;
+            }
+        }
+    }"
+    sudo echo -e $nginx_config > /etc/nginx/nginx.conf
+    sudo cat /etc/nginx/nginx.conf
+    sudo ufw allow 'Nginx HTTP'
+    # sudo ln -s /etc/nginx/sites-available/your_domain /etc/nginx/sites-enabled/
+    sudo nginx -t
+    service nginx start
+    service nginx status
+    curl http://${SERVER_DDOS_VXLAN_IP_LINUX}:80
+    sudo netstat -ntlp
 }
 
 #------------------------------------------------------------------------------#
@@ -143,7 +181,11 @@ function main()
     context_create
 
     # Configure Snort to detect flooding
-    configure_snort_sniff &
+    
+
+    configure_proxy
+
+    configure_snort_sniff
     
     # Enter our worker loop.
     context_loop

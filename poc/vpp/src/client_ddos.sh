@@ -55,7 +55,7 @@ function context_create()
         dev "${NET_IF_DOCKER}" \
         ttl 1
     ip link set "${LINK_VXLAN_LINUX}" up
-    ip addr add "${CLIENT_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
+    ip addr add "${CLIENT_DDOS_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
 
     # Get MTU of interface. VXLAN must use a smaller value due to overhead.
     mtu="$(cat /sys/class/net/${NET_IF_DOCKER}/mtu)"
@@ -80,13 +80,13 @@ function context_create()
     ${VPPCTL} create interface memif id 0 slave
     sleep 1
     ${VPPCTL} set int state memif0/0 up
-    ${VPPCTL} set int ip address memif0/0 "${CLIENT_VPP_MEMIF_IP}/${VPP_MEMIF_NM}"
+    ${VPPCTL} set int ip address memif0/0 "${CLIENT_DDOS_VPP_TAP_IP_MEMIF}/${VPP_MEMIF_NM}"
 
     # Create VPP-controlled tap interface bridged to the memif.
     ${VPPCTL} create tap id 0 host-if-name vpp-tap-0
     sleep 1
     ${VPPCTL} set interface state tap0 up
-    ip addr add "${CLIENT_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
+    ip addr add "${CLIENT_DDOS_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
     ${VPPCTL} set interface l2 bridge tap0          "${VPP_BRIDGE_DOMAIN_TAP}"
     ${VPPCTL} set interface l2 bridge memif0/0      "${VPP_BRIDGE_DOMAIN_TAP}"
 }
@@ -105,8 +105,11 @@ function context_loop()
 {
     # Sleep indefinitely (to keep container alive for testing).
     # tail -f /dev/null
-    iperf -c ${SERVER_VPP_TAP_IP_MEMIF} -t 20
-    echo "koniec iperfa klient"
+    # iperf -c ${SERVER_DDOS_VPP_TAP_IP_MEMIF} -t 20
+    for i in {1..50000}
+    do
+        curl "http://${SERVER_SQL_INJECTION_VPP_TAP_IP_MEMIF}/?arg=ddos"
+    done
     tail -f /dev/null
 }
 
@@ -131,9 +134,6 @@ function main()
 
     # Bring up interfaces.
     context_create
-
-    # Enable health check responder.
-    health_check_init &
 
     # Enter our worker loop.
     context_loop

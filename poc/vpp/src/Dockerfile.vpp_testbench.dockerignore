@@ -10,6 +10,7 @@
 # Entrypoint scripts and other artifacts.
 !client_ddos.sh
 !server_ddos.sh
+!server_sql_injection.sh
 !vpp_testbench_helpers.sh
 !rules
 !ddos_rules.txt

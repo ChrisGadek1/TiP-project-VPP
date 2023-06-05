@@ -50,6 +50,10 @@ RUN apt update -y && \
         libdnet \ 
         autoconf \ 
         libtool \
+        socat \
+        nginx \
+        net-tools \
+        nmap \
         && \
     apt clean -y && \
     apt-get install -y iperf
@@ -104,20 +108,21 @@ ADD vpp_testbench_helpers.sh /
 
 
 #------------------------------------------------------------------------------#
-# Client image.
-FROM baseline as client_img
+# 1 Client (trying to do ddos attack) image.
+FROM baseline as client_ddos_img
 # Enable a health probe.
 ARG HEALTHCHECK_PORT=8080
 ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
 HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
 # Image-specific overrides.
 ADD ./client_ddos.sh /entrypoint.sh
+RUN chmod 777 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
  
 
 #------------------------------------------------------------------------------#
-# Server image.
-FROM baseline as server_img
+# 1 Server (anti ddos) image.
+FROM baseline as server_ddos_img
 # Enable a health probe.
 ARG HEALTHCHECK_PORT=8080
 ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
@@ -126,5 +131,19 @@ HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit
 ADD ./server_ddos.sh /entrypoint.sh
 ADD rules /etc/snort/rules
 ADD ./ddos_rules.txt /etc/snort/rules/ddos_rules.txt
+RUN chmod 777 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
+#------------------------------------------------------------------------------#
+# 2 Server (anti SQL injection) image.
+FROM baseline as server_sql_injection_img
+# Enable a health probe.
+ARG HEALTHCHECK_PORT=8080
+ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
+HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
+# Image-specific overrides.
+ADD ./server_sql_injection.sh /entrypoint.sh
+ADD rules /etc/snort/rules
+ADD ./ddos_rules.txt /etc/snort/rules/ddos_rules.txt
+RUN chmod 777 /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
