@@ -63,6 +63,7 @@ export DOCKER_CLIENT_DDOS_HOST="client_ddos"
 
 export DOCKER_SERVER_DDOS_HOST="server_ddos"
 export DOCKER_SERVER_SQL_INJECTION_HOST="server_sql_injection"
+export DOCKER_SERVER_HTTP_HOST="server_http"
 # Some related variables have to be computed at the last second, so they
 # are not all defined up-front.
 export CLIENT_VPP_NETNS_DST="/var/run/netns/${DOCKER_CLIENT_DDOS_HOST}"
@@ -260,6 +261,33 @@ function host_only_run_testbench_server_sql_injection_container()
         "${image_name}"
 }
 
+function host_only_run_testbench_server_http()
+{
+    # Sanity check.
+    if [ $# -ne 1 ]; then
+        echo "Sanity failure."
+        false
+        exit
+    fi
+
+    # Launch container. Mount the local PWD into the container too (so we can
+    # backup results).
+    # TODO
+    local image_name="${1}"
+    docker run -d --rm \
+        --cap-add=NET_ADMIN \
+        --cap-add=SYS_NICE \
+        --cap-add=SYS_PTRACE \
+        --device=/dev/net/tun:/dev/net/tun \
+        --device=/dev/vfio/vfio:/dev/vfio/vfio \
+        --device=/dev/vhost-net:/dev/vhost-net \
+        --name "${DOCKER_SERVER_HTTP_HOST}" \
+        --volume="${VPP_SOCK_PATH}:/run/vpp:rw" \
+        --network name="${DOCKER_NET},ip=${SERVER_HTTP_IP_DOCKER}" \
+        --log-driver=journald \
+        "${image_name}"
+}
+
 #------------------------------------------------------------------------------#
 # @brief:       Terminates the testbench client container.
 function host_only_kill_testbench_client_ddos_container()
@@ -281,6 +309,13 @@ function host_only_kill_testbench_server_sql_injection_container()
     docker kill "${DOCKER_SERVER_SQL_INJECTION_HOST}" || true
     docker rm   "${DOCKER_SERVER_SQL_INJECTION_HOST}" || true
 }
+
+function host_only_kill_testbench_server_http_container()
+{
+    docker kill "${DOCKER_SERVER_HTTP_HOST}" || true
+    docker rm   "${DOCKER_SERVER_HTTP_HOST}" || true
+}
+
 
 #------------------------------------------------------------------------------#
 # @brief:       Launches an interactive shell in the client container.

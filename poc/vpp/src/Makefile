@@ -19,6 +19,8 @@ DOCKER_SERVER_REL                    := local
 DOCKER_SERVER_DDOS_IMG_FULL          := $(DOCKER_SERVER_DDOS_IMG):$(DOCKER_SERVER_REL)
 DOCKER_SERVER_SQL_INJECTION_IMG      := server_sql_injection
 DOCKER_SERVER_SQL_INJECTION_IMG_FULL := $(DOCKER_SERVER_SQL_INJECTION_IMG):$(DOCKER_SERVER_REL)
+DOCKER_SERVER_HTTP_IMG      		 := server_http
+DOCKER_SERVER_HTTP_IMG_FULL 		 := $(DOCKER_SERVER_HTTP_IMG):$(DOCKER_SERVER_REL)
 # Docker build-time settings (and run-time settings as well).
 DOCKER_HEALTH_PROBE_PORT        := $(shell bash -c ". vpp_testbench_helpers.sh; host_only_get_docker_health_probe_port")
 
@@ -34,6 +36,7 @@ define cleanup_everything
 		host_only_kill_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
 		host_only_kill_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
 		host_only_kill_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
+		host_only_kill_testbench_server_http_container $(DOCKER_SERVER_HTTP_IMG_FULL); \
 		"
 
 	# Cleanup Docker bridge network.
@@ -59,6 +62,7 @@ define launch_testbench
 		host_only_run_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
 		host_only_run_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
 		host_only_run_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
+		host_only_run_testbench_server_http $(DOCKER_SERVER_HTTP_IMG_FULL); \
 		"
 
 	# Entrypoint scripts will bring up the various links.
@@ -79,7 +83,7 @@ all: docker
 # Build all docker images.
 .PHONY: docker
 docker: Dockerfile.vpp_testbench Dockerfile.vpp_testbench.dockerignore \
-	client_ddos.sh server_ddos.sh server_sql_injection.sh \
+	client_ddos.sh server_ddos.sh server_sql_injection.sh server_http.sh \
 	vpp_testbench_helpers.sh
 	# Client ddos image.
 	DOCKER_BUILDKIT=1 docker build \
@@ -101,6 +105,13 @@ docker: Dockerfile.vpp_testbench Dockerfile.vpp_testbench.dockerignore \
 			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
 			--tag $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL) \
 			--target server_sql_injection_img \
+			.
+	# Server http image.
+	DOCKER_BUILDKIT=1 docker build \
+			--file Dockerfile.vpp_testbench \
+			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
+			--tag $(DOCKER_SERVER_HTTP_IMG_FULL) \
+			--target server_http_img \
 			.
 #------------------------------------------------------------------------------#
 # Execute end-to-end test via containers.

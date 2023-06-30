@@ -72,9 +72,9 @@ function context_create()
         dpdk '{' uio-driver uio_pci_generic no-pci '}'
 
     # Wait for VPP to come up.
-    while ! ${VPPCTL} show log; do
-        sleep 1
-    done
+    # while ! ${VPPCTL} show log; do
+    #     sleep 1
+    # done
 
     # Bring up the memif interface and assign an IP to it.
     ${VPPCTL} create interface memif id 0 master
@@ -107,9 +107,10 @@ function context_loop()
     # tail -f /dev/null
 
     # iperf -s -V
-    answer="HTTP/1.1 200 OK\n
-    <html><body><h1>It works!</h1></body></html>"
-    sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
+    # answer="HTTP/1.1 200 OK\n
+    # <html><body><h1>It works!</h1></body></html>"
+    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
+    tail -f /dev/null
 }
 
 
@@ -127,9 +128,46 @@ function configure_snort_sniff()
    sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
    # sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 100, seconds 3" >> /etc/snort/threshold.conf
 
-   sudo cat /etc/snort/snort.conf
-   sudo snort -A console -i ${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
-   sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
+   sudo /usr/sbin/iptables -t nat -I PREROUTING -j NFQUEUE --queue-num 1
+   sudo /usr/sbin/iptables -I FORWARD -j NFQUEUE --queue-num 1
+   sudo snort -Q --daq nfq --daq-var queue=1 -c /etc/snort/snort.conf
+   #sudo cat /etc/snort/snort.conf
+   #sudo snort -A console -i ${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
+   #sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
+}
+
+function configure_proxy()
+{
+    nginx_config="
+    events {
+        worker_connections  4096;
+    }
+
+    http {
+            access_log  /var/log/nginx/access.log;
+
+            server {
+            proxy_set_header Host \$http_host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+
+            listen 80;
+
+            server_name _;
+                
+            location / {
+                proxy_pass http://${SERVER_SQL_INJECTION_VXLAN_IP_LINUX}:80;
+            }
+        }
+    }"
+    sudo echo -e $nginx_config > /etc/nginx/nginx.conf
+    sudo cat /etc/nginx/nginx.conf
+    sudo ufw allow 'Nginx HTTP'
+    # sudo ln -s /etc/nginx/sites-available/your_domain /etc/nginx/sites-enabled/
+    sudo nginx -t
+    service nginx start
+    service nginx status
 }
 
 #------------------------------------------------------------------------------#
@@ -141,6 +179,8 @@ function main()
 
     # Bring up interfaces.
     context_create
+
+    configure_proxy
 
     # Configure Snort to detect flooding
     configure_snort_sniff &

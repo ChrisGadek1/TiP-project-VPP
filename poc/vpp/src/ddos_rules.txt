@@ -1,5 +1,5 @@
 #DOS ATTACK DETECTION
-reject tcp any any -> any any (msg:"Possible DoS - other TCP"; flow: stateless; detection_filter: track by_src, count 10, seconds 3; sid:10000001; react: block, msg ;)
+alert tcp any any -> any any (msg:"Possible DoS - other TCP"; flow: stateless; detection_filter: track by_src, count 10, seconds 1; sid:10000001; react: msg, block;)
 alert tcp !$HOME_NET any -> $HOME_NET any (flags: R; msg:"Possible RST DoS"; flow: stateless; threshold: type both, track by_dst, count 100, seconds 3; sid:10003;rev:1;)
 alert tcp !$HOME_NET any -> $HOME_NET any (flags: F; msg:"Possible FIN DoS"; flow: stateless; threshold: type both, track by_dst, count 100, seconds 3; sid:10004;rev:1;)
 alert udp !$HOME_NET any -> $HOME_NET any (msg:"Possible UDP DoS"; flow: stateless; threshold: type both, track by_dst, count 100, seconds 3; sid:10005;rev:1;)

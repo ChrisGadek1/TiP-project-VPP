@@ -53,6 +53,7 @@ RUN apt update -y && \
         socat \
         nginx \
         net-tools \
+        libnetfilter-queue-dev \
         nmap \
         && \
     apt clean -y && \
@@ -68,7 +69,7 @@ RUN mkdir ~/snort_src && cd ~/snort_src && \
     wget https://www.snort.org/downloads/snort/snort-2.9.20.tar.gz && \
     tar -xvzf snort-2.9.20.tar.gz && \
     cd snort-2.9.20 && \
-    ./configure --enable-sourcefire && make && sudo make install && \
+    ./configure  --enable-active-response --enable-react --enable-flexresp3 --enable-sourcefire --enable-debug && make && sudo make install && \
     sudo ldconfig && \
     sudo ln -s /usr/local/bin/snort /usr/sbin/snort
 # Snort setup
@@ -143,7 +144,17 @@ ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
 HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
 # Image-specific overrides.
 ADD ./server_sql_injection.sh /entrypoint.sh
-ADD rules /etc/snort/rules
-ADD ./ddos_rules.txt /etc/snort/rules/ddos_rules.txt
+RUN chmod 777 /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
+#------------------------------------------------------------------------------#
+# 3 Server (with HTTP server) image.
+FROM baseline as server_http_img
+# Enable a health probe.
+ARG HEALTHCHECK_PORT=8080
+ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
+HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
+# Image-specific overrides.
+ADD ./server_http.sh /entrypoint.sh
 RUN chmod 777 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

@@ -72,9 +72,9 @@ function context_create()
         dpdk '{' uio-driver uio_pci_generic no-pci '}'
 
     # Wait for VPP to come up.
-    while ! ${VPPCTL} show log; do
-        sleep 1
-    done
+    # while ! ${VPPCTL} show log; do
+    #     sleep 1
+    # done
 
     # Bring up the memif interface and assign an IP to it.
     ${VPPCTL} create interface memif id 0 master
@@ -103,35 +103,7 @@ function context_destroy()
 # @brief:   Server worker loop to keep the container alive. Just idles.
 function context_loop()
 {
-    # Sleep indefinitely (to keep container alive for testing).
-    # tail -f /dev/null
-
-    # iperf -s -V
-    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'HTTP/1.0 200 OK\r\n\r\n\'"
-    #     answer="HTTP/1.1 200 OK\n
-    # <html><body><h1>It works!</h1></body></html>"
-    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
     tail -f /dev/null
-}
-
-function configure_snort_sniff()
-{
-   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar HOME_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar HOME_NET ${SERVER_SQL_INJECTION_VXLAN_IP_LINUX}\/32/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "ipvar EXTERNAL_NET any" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/ipvar EXTERNAL_NET !\$HOME_NET/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "var RULE_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var RULE_PATH rules/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "var SO_RULE_PATH ../so_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var SO_RULE_PATH so_rules/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "var PREPROC_RULE_PATH ../preproc_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var PREPROC_RULE_PATH preproc_rules/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "var WHITE_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var WHITE_LIST_PATH rules/" /etc/snort/snort.conf; }
-   sudo cat /etc/snort/snort.conf | grep -Fn "var BLACK_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var BLACK_LIST_PATH rules/" /etc/snort/snort.conf; }
-   # sudo snort -T -c /etc/snort/snort.conf
-   
-   sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
-   sudo echo "config daq: afpacket" >> cat /etc/snort/snort.conf
-   sudo echo "config daq_mode: inline" >> cat /etc/snort/snort.conf
-   # sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 100, seconds 3" >> /etc/snort/threshold.conf
-
-   sudo cat /etc/snort/snort.conf
-   sudo snort --daq afpacket -Q -i vpp-tap-0:${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
 }
 
 function configure_proxy()
@@ -153,9 +125,28 @@ function configure_proxy()
             listen 80;
 
             server_name _;
-                
+            
+
+            set \$block_sql_injections 0;
+            if (\$query_string ~ \".*select.*\") {
+            set \$block_sql_injections 1;
+            }
+            if (\$query_string ~ \"union.*all.*select.*\") {
+            set \$block_sql_injections 1;
+            }
+            if (\$query_string ~ \"concat.*\(\") {
+            set \$block_sql_injections 1;
+            }
+            if (\$block_sql_injections = 1) {
+            return 403;
+            }
+
+            location ~* \"(\'|\\\")(.*)(drop|insert|md5|select|union)\" { 
+                deny all; 
+            } 
+            
             location / {
-                proxy_pass http://${SERVER_DDOS_VXLAN_IP_LINUX}:80;
+                proxy_pass http://${SERVER_HTTP_VXLAN_IP_LINUX}:80;               
             }
         }
     }"
@@ -166,8 +157,6 @@ function configure_proxy()
     sudo nginx -t
     service nginx start
     service nginx status
-    curl http://${SERVER_DDOS_VXLAN_IP_LINUX}:80
-    sudo netstat -ntlp
 }
 
 #------------------------------------------------------------------------------#
@@ -179,13 +168,8 @@ function main()
 
     # Bring up interfaces.
     context_create
-
-    # Configure Snort to detect flooding
     
-
     configure_proxy
-
-    configure_snort_sniff
     
     # Enter our worker loop.
     context_loop
