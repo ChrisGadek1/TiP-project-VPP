@@ -11,9 +11,9 @@ SHELL=/bin/bash
 
 # Image names.
 # TODO: semver2 format if we want to publish these to a registry.
-DOCKER_CLIENT_DDOS_IMG               := client_ddos
+DOCKER_CLIENT_IMG               	 := client
 DOCKER_CLIENT_REL                    := local
-DOCKER_CLIENT_DDOS_IMG_FULL          := $(DOCKER_CLIENT_DDOS_IMG):$(DOCKER_CLIENT_REL)
+DOCKER_CLIENT_IMG_FULL          	 := $(DOCKER_CLIENT_IMG):$(DOCKER_CLIENT_REL)
 DOCKER_SERVER_DDOS_IMG               := server_ddos
 DOCKER_SERVER_REL                    := local
 DOCKER_SERVER_DDOS_IMG_FULL          := $(DOCKER_SERVER_DDOS_IMG):$(DOCKER_SERVER_REL)
@@ -33,7 +33,7 @@ define cleanup_everything
 	# Terminate the containers.
 	bash -c "\
 		. vpp_testbench_helpers.sh; \
-		host_only_kill_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
+		host_only_kill_testbench_client_container $(DOCKER_CLIENT_IMG_FULL); \
 		host_only_kill_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
 		host_only_kill_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
 		host_only_kill_testbench_server_http_container $(DOCKER_SERVER_HTTP_IMG_FULL); \
@@ -59,7 +59,7 @@ define launch_testbench
 	# Launch the containers.
 	bash -c "\
 		. vpp_testbench_helpers.sh; \
-		host_only_run_testbench_client_ddos_container $(DOCKER_CLIENT_DDOS_IMG_FULL); \
+		host_only_run_testbench_client_container $(DOCKER_CLIENT_IMG_FULL) $(CLIENT_OPTION); \
 		host_only_run_testbench_server_ddos_container $(DOCKER_SERVER_DDOS_IMG_FULL); \
 		host_only_run_testbench_server_sql_injection_container $(DOCKER_SERVER_SQL_INJECTION_IMG_FULL); \
 		host_only_run_testbench_server_http $(DOCKER_SERVER_HTTP_IMG_FULL); \
@@ -83,14 +83,14 @@ all: docker
 # Build all docker images.
 .PHONY: docker
 docker: Dockerfile.vpp_testbench Dockerfile.vpp_testbench.dockerignore \
-	client_ddos.sh server_ddos.sh server_sql_injection.sh server_http.sh \
+	client.sh server_ddos.sh server_sql_injection.sh server_http.sh \
 	vpp_testbench_helpers.sh
 	# Client ddos image.
 	DOCKER_BUILDKIT=1 docker build \
 			--file Dockerfile.vpp_testbench \
 			--build-arg HEALTHCHECK_PORT=$(DOCKER_HEALTH_PROBE_PORT) \
-			--tag $(DOCKER_CLIENT_DDOS_IMG_FULL) \
-			--target client_ddos_img \
+			--tag $(DOCKER_CLIENT_IMG_FULL) \
+			--target client_img \
 			.
 	# Server ddos image.
 	DOCKER_BUILDKIT=1 docker build \

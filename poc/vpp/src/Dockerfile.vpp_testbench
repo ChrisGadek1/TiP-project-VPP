@@ -110,13 +110,13 @@ ADD vpp_testbench_helpers.sh /
 
 #------------------------------------------------------------------------------#
 # 1 Client (trying to do ddos attack) image.
-FROM baseline as client_ddos_img
+FROM baseline as client_img
 # Enable a health probe.
 ARG HEALTHCHECK_PORT=8080
 ENV HEALTHCHECK_PORT_RUNTIME="${HEALTHCHECK_PORT}"
 HEALTHCHECK CMD curl --fail "http://localhost:$HEALTHCHECK_PORT_RUNTIME" || exit 1
 # Image-specific overrides.
-ADD ./client_ddos.sh /entrypoint.sh
+ADD ./client.sh /entrypoint.sh
 RUN chmod 777 /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
  

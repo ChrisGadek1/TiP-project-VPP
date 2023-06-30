@@ -103,13 +103,6 @@ function context_destroy()
 # @brief:   Server worker loop to keep the container alive. Just idles.
 function context_loop()
 {
-    # Sleep indefinitely (to keep container alive for testing).
-    # tail -f /dev/null
-
-    # iperf -s -V
-    # answer="HTTP/1.1 200 OK\n
-    # <html><body><h1>It works!</h1></body></html>"
-    # sudo socat tcp-listen:80,reuseaddr,fork "exec:printf \'${answer}\'"
     tail -f /dev/null
 }
 
@@ -123,17 +116,12 @@ function configure_snort_sniff()
    sudo cat /etc/snort/snort.conf | grep -Fn "var PREPROC_RULE_PATH ../preproc_rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var PREPROC_RULE_PATH preproc_rules/" /etc/snort/snort.conf; }
    sudo cat /etc/snort/snort.conf | grep -Fn "var WHITE_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var WHITE_LIST_PATH rules/" /etc/snort/snort.conf; }
    sudo cat /etc/snort/snort.conf | grep -Fn "var BLACK_LIST_PATH ../rules" | awk -F ':' '{print $1}' | { read number; sed -i "${number}s/.*/var BLACK_LIST_PATH rules/" /etc/snort/snort.conf; }
-   # sudo snort -T -c /etc/snort/snort.conf
    
    sudo cat /etc/snort/rules/ddos_rules.txt >> /etc/snort/rules/local.rules
-   # sudo echo "event_filter gen_id 1, sig_id 10000001, type threshold, track by_src, count 100, seconds 3" >> /etc/snort/threshold.conf
 
    sudo /usr/sbin/iptables -t nat -I PREROUTING -j NFQUEUE --queue-num 1
    sudo /usr/sbin/iptables -I FORWARD -j NFQUEUE --queue-num 1
    sudo snort -Q --daq nfq --daq-var queue=1 -c /etc/snort/snort.conf
-   #sudo cat /etc/snort/snort.conf
-   #sudo snort -A console -i ${LINK_VXLAN_LINUX} -u snort -g snort -c /etc/snort/snort.conf
-   #sudo snort -A console -i vpp-tap-0 -u snort -g snort -c /etc/snort/snort.conf
 }
 
 function configure_proxy()

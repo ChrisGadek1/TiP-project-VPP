@@ -8,7 +8,7 @@
 *
 
 # Entrypoint scripts and other artifacts.
-!client_ddos.sh
+!client.sh
 !server_ddos.sh
 !server_http.sh
 !server_sql_injection.sh

@@ -153,7 +153,6 @@ function configure_proxy()
     sudo echo -e $nginx_config > /etc/nginx/nginx.conf
     sudo cat /etc/nginx/nginx.conf
     sudo ufw allow 'Nginx HTTP'
-    # sudo ln -s /etc/nginx/sites-available/your_domain /etc/nginx/sites-enabled/
     sudo nginx -t
     service nginx start
     service nginx status

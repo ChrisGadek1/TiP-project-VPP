@@ -28,7 +28,7 @@ fi
 export DOCKER_HEALTH_PROBE_PORT="8123"
 # Docker bridge network settings.
 
-export CLIENT_DDOS_BRIDGE_IP_DOCKER="169.254.0.1"
+export CLIENT_BRIDGE_IP_DOCKER="169.254.0.1"
 export CLIENT_SQL_INJECTION_BRIDGE_IP_DOCKER="169.254.0.2"
 export CLIENT_XSS_BRIDGE_IP_DOCKER="169.254.0.3"
 export CLIENT_NORMAL_BRIDGE_IP_DOCKER="169.254.0.4"
@@ -41,7 +41,7 @@ export SERVER_HTTP_IP_DOCKER="169.254.0.8"
 export BRIDGE_NET_DOCKER="169.254.0.0/24"
 export BRIDGE_GW_DOCKER="169.254.0.254"
 # Overlay IP addresses.
-export CLIENT_DDOS_VXLAN_IP_LINUX="169.254.10.1"
+export CLIENT_VXLAN_IP_LINUX="169.254.10.1"
 export CLIENT_SQL_INJECTION_VXLAN_IP_LINUX="169.254.10.2"
 export CLIENT_XSS_VXLAN_IP_LINUX="169.254.10.3"
 export CLIENT_NORMAL_VXLAN_IP_LINUX="169.254.10.4"
@@ -59,14 +59,14 @@ export VXLAN_PORT="4789"
 # Docker network we use to bridge containers.
 export DOCKER_NET="vpp-testbench-net"
 # Docker container names for client and server (runtime aliases).
-export DOCKER_CLIENT_DDOS_HOST="client_ddos"
+export DOCKER_CLIENT_HOST="client"
 
 export DOCKER_SERVER_DDOS_HOST="server_ddos"
 export DOCKER_SERVER_SQL_INJECTION_HOST="server_sql_injection"
 export DOCKER_SERVER_HTTP_HOST="server_http"
 # Some related variables have to be computed at the last second, so they
 # are not all defined up-front.
-export CLIENT_VPP_NETNS_DST="/var/run/netns/${DOCKER_CLIENT_DDOS_HOST}"
+export CLIENT_VPP_NETNS_DST="/var/run/netns/${DOCKER_CLIENT_HOST}"
 export SERVER_VPP_NETNS_DST="/var/run/netns/${DOCKER_SERVER_DDOS_HOST}"
 
 # VPP options.
@@ -74,14 +74,14 @@ export SERVER_VPP_NETNS_DST="/var/run/netns/${DOCKER_SERVER_DDOS_HOST}"
 export CLIENT_VPP_HOST_IF="vpp1"
 export SERVER_VPP_HOST_IF="vpp2"
 # Putting VPP interfaces on separate subnet from Linux-stack i/f.
-export CLIENT_DDOS_VPP_MEMIF_IP="169.254.11.1"
+export CLIENT_VPP_MEMIF_IP="169.254.11.1"
 
 export SERVER_DDOS_VPP_MEMIF_IP="169.254.11.5"
 export SERVER_SQL_INJECTION_VPP_MEMIF_IP="169.254.11.6"
 
 export VPP_MEMIF_NM="24"
 
-export CLIENT_DDOS_VPP_TAP_IP_MEMIF="169.254.12.1"
+export CLIENT_VPP_TAP_IP_MEMIF="169.254.12.1"
 export CLIENT_SQL_INJECTION_VPP_TAP_IP_MEMIF="169.254.12.2"
 export CLIENT_XSS_VPP_TAP_IP_MEMIF="169.254.12.3"
 export CLIENT_NORMAL_VPP_TAP_IP_MEMIF="169.254.12.4"
@@ -175,10 +175,10 @@ function host_only_create_vpp_deps()
 
 #------------------------------------------------------------------------------#
 # @brief:       Launches the testbench client container.
-function host_only_run_testbench_client_ddos_container()
+function host_only_run_testbench_client_container()
 {
     # Sanity check.
-    if [ $# -ne 1 ]; then
+    if [ $# -ne 2 ]; then
         echo "Sanity failure."
         false
         exit
@@ -191,13 +191,14 @@ function host_only_run_testbench_client_ddos_container()
         --cap-add=NET_ADMIN \
         --cap-add=SYS_NICE \
         --cap-add=SYS_PTRACE \
+        --env CLIENT_OPTION="${2}" \
         --device=/dev/net/tun:/dev/net/tun \
         --device=/dev/vfio/vfio:/dev/vfio/vfio \
         --device=/dev/vhost-net:/dev/vhost-net \
-        --name "${DOCKER_CLIENT_DDOS_HOST}" \
+        --name "${DOCKER_CLIENT_HOST}" \
         --volume="$(pwd):/work:rw" \
         --volume="${VPP_SOCK_PATH}:/run/vpp:rw" \
-        --network name="${DOCKER_NET},ip=${CLIENT_DDOS_BRIDGE_IP_DOCKER}" \
+        --network name="${DOCKER_NET},ip=${CLIENT_BRIDGE_IP_DOCKER}" \
         --log-driver=journald \
         --workdir=/work \
         "${image_name}"
@@ -290,10 +291,10 @@ function host_only_run_testbench_server_http()
 
 #------------------------------------------------------------------------------#
 # @brief:       Terminates the testbench client container.
-function host_only_kill_testbench_client_ddos_container()
+function host_only_kill_testbench_client_container()
 {
-    docker kill "${DOCKER_CLIENT_DDOS_HOST}" || true
-    docker rm   "${DOCKER_CLIENT_DDOS_HOST}" || true
+    docker kill "${DOCKER_CLIENT_HOST}" || true
+    docker rm   "${DOCKER_CLIENT_HOST}" || true
 }
 
 #------------------------------------------------------------------------------#
@@ -321,7 +322,7 @@ function host_only_kill_testbench_server_http_container()
 # @brief:       Launches an interactive shell in the client container.
 function host_only_shell_client_container()
 {
-    docker exec -it "${DOCKER_CLIENT_DDOS_HOST}" bash --init-file /entrypoint.sh
+    docker exec -it "${DOCKER_CLIENT_HOST}" bash --init-file /entrypoint.sh
 }
 
 #------------------------------------------------------------------------------#
@@ -353,7 +354,7 @@ function host_only_move_host_interfaces_into_container()
     # Mount container network namespaces so that they are accessible via "ip
     # netns". Ignore "START_OF_SCRIPT": just used to make
     # linter-compliant text indentation look nicer.
-    DOCKER_CLIENT_PID=$(docker inspect -f '{{.State.Pid}}' ${DOCKER_CLIENT_DDOS_HOST})
+    DOCKER_CLIENT_PID=$(docker inspect -f '{{.State.Pid}}' ${DOCKER_CLIENT_HOST})
     DOCKER_SERVER_PID=$(docker inspect -f '{{.State.Pid}}' ${DOCKER_SERVER_DDOS_HOST})
     CLIENT_VPP_NETNS_SRC=/proc/${DOCKER_CLIENT_PID}/ns/net
     SERVER_VPP_NETNS_SRC=/proc/${DOCKER_SERVER_PID}/ns/net
@@ -364,7 +365,7 @@ function host_only_move_host_interfaces_into_container()
     # IPv4 address to them.
     sudo ip link set dev "${CLIENT_VPP_HOST_IF}" netns "${DOCKER_CLIENT_NETNS}"
     sudo ip link set dev "${SERVER_VPP_HOST_IF}" netns "${DOCKER_SERVER_NETNS}"
-    docker exec ${DOCKER_CLIENT_DDOS_HOST} ip a
+    docker exec ${DOCKER_CLIENT_HOST} ip a
     docker exec ${DOCKER_SERVER_DDOS_HOST} ip a
 
     # Bring up the links and assign IP addresses. This must be done
